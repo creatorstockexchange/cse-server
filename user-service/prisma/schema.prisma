@@ -1,0 +1,90 @@
+generator client {
+  provider   = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               Int                 @id @default(autoincrement())
+  email            String              @unique
+  name             String
+  role             String              @default("user")
+  password         String
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  depositAddresses deposit_addresses[]
+  transactions     transactions[]
+}
+
+model deposit_addresses {
+  id           String         @id @default(uuid())
+  user_id      Int
+  chain        Chain
+  currency     Currency
+  address      String?        @unique
+  is_active    Boolean        @default(true)
+  created_at   DateTime       @default(now())
+  user         User           @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  transactions transactions[]
+
+  @@unique([user_id, chain, currency])
+  @@index([user_id])
+  @@index([chain])
+  @@map("deposit_addresses")
+}
+
+model transactions {
+  id                 String             @id @default(uuid())
+  wallet_id          String?
+  amount             Decimal            @db.Decimal(18, 9)
+  created_at         DateTime           @default(now())
+  blockchain_hash    String?            @map("blockchain_hash")
+  confirmations      Int?
+  deposit_address_id String?
+  status             TransactionStatus  @default(pending)
+  updated_at         DateTime           @updatedAt
+  user_id            Int
+  type               TransactionType
+  currency           Currency
+  deposit_address    deposit_addresses? @relation(fields: [deposit_address_id], references: [id])
+  user               User               @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([wallet_id])
+  @@index([deposit_address_id])
+  @@map("transactions")
+}
+
+enum UserRole {
+  investor
+  creator
+  admin
+}
+
+enum Currency {
+  USDC
+  SOL
+  ETH
+  BTC
+}
+
+enum Chain {
+  solana
+  ethereum
+  polygon
+}
+
+enum TransactionType {
+  deposit
+  withdrawal
+  transfer
+}
+
+enum TransactionStatus {
+  pending
+  confirmed
+  failed
+}
