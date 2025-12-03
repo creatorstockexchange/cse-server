@@ -1,5 +1,5 @@
 generator client {
-  provider   = "prisma-client-js"
+  provider = "prisma-client-js"
 }
 
 datasource db {
@@ -8,15 +8,21 @@ datasource db {
 }
 
 model User {
-  id               Int                 @id @default(autoincrement())
-  email            String              @unique
-  name             String
-  role             String              @default("user")
-  password         String
-  createdAt        DateTime            @default(now())
-  updatedAt        DateTime            @updatedAt
-  depositAddresses deposit_addresses[]
-  transactions     transactions[]
+  id                    Int                     @id @default(autoincrement())
+  email                 String                  @unique
+  name                  String
+  role                  String                  @default("user")
+  password              String
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  depositAddresses      deposit_addresses[]
+  transactions          transactions[]
+  creatorProfile        creator_profiles?
+  creatorToken          creator_token?
+  creatorApplication    creator_applications?
+  creatorDocuments      creator_documents[]
+  creatorSocialLinks    creator_social_links[]
+  verificationLogs      verification_logs[]
 }
 
 model deposit_addresses {
@@ -58,6 +64,110 @@ model transactions {
   @@map("transactions")
 }
 
+model creator_profiles {
+  id                 String              @id @default(uuid())
+  bio                String
+  category           CreatorCategory
+  status             CreatorStatus       @default(inactive)
+  wallet             String
+  created_at         DateTime            @default(now())
+  updated_at         DateTime            @updatedAt
+  creator_handle     String              @unique
+  custom_category    String?
+  engagement_metrics String?
+  full_name          String
+  funding_goal       Decimal?            @db.Decimal(18, 2)
+  ico_supply         BigInt?
+  phone_number       String?
+  profile_picture    String?
+  token_name         String
+  token_pitch        String
+  token_symbol       String              @unique
+  user_id            Int                 @unique
+  user               User                @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([creator_handle])
+  @@index([token_symbol])
+  @@map("creator_profiles")
+}
+
+model creator_token {
+  id           String   @id @default(uuid())
+  name         String
+  symbol       String   @unique
+  total_supply BigInt
+  mintAddress  String   @unique
+  user         User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user_id      Int      @unique
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+
+  @@index([user_id])
+  @@map("creator_token")
+}
+
+model creator_applications {
+  id                         String    @id @default(uuid())
+  state                      ApplicationState @default(pending_submission)
+  rejection_reason           String?
+  submitted_at               DateTime  @default(now())
+  reviewed_at                DateTime?
+  approved_at                DateTime?
+  content_ownership_declared Boolean   @default(false)
+  user_id                    Int       @unique
+  user                       User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([state])
+  @@map("creator_applications")
+}
+
+model creator_documents {
+  id         String         @id @default(uuid())
+  type       DocumentType
+  file_url   String
+  status     DocumentStatus @default(pending)
+  notes      String?
+  created_at DateTime       @default(now())
+  updated_at DateTime       @updatedAt
+  user_id    Int
+  user       User           @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([status])
+  @@map("creator_documents")
+}
+
+model creator_social_links {
+  id             String       @id @default(uuid())
+  platform       SocialPlatform
+  handle         String
+  url            String
+  verified       Boolean      @default(false)
+  created_at     DateTime     @default(now())
+  follower_count Int?
+  user_id        Int
+  user           User         @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@map("creator_social_links")
+}
+
+model verification_logs {
+  id         String   @id @default(uuid())
+  action     String
+  actor      String
+  metadata   Json?
+  created_at DateTime @default(now())
+  user_id    Int
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([created_at])
+  @@map("verification_logs")
+}
+
 enum UserRole {
   investor
   creator
@@ -87,4 +197,53 @@ enum TransactionStatus {
   pending
   confirmed
   failed
+}
+
+enum CreatorCategory {
+  artist
+  musician
+  writer
+  developer
+  influencer
+  entrepreneur
+  other
+}
+
+enum CreatorStatus {
+  active
+  inactive
+  suspended
+  pending
+}
+
+enum ApplicationState {
+  pending_submission
+  submitted
+  under_review
+  approved
+  rejected
+}
+
+enum DocumentType {
+  identity
+  proof_of_address
+  business_license
+  tax_document
+  other
+}
+
+enum DocumentStatus {
+  pending
+  approved
+  rejected
+}
+
+enum SocialPlatform {
+  twitter
+  instagram
+  youtube
+  tiktok
+  linkedin
+  facebook
+  other
 }
