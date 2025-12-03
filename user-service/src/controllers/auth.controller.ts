@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import type authSchema from "../schema/auth.schema.js";
+import type authSchema from "../schemas/auth.schema.js";
 
 import * as z from "zod";
 import { prisma } from "../db.js";
