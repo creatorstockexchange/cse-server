@@ -7,6 +7,11 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ============================================================================
+// CORE USER MODEL
+// ============================================================================
+// Central user model supporting investors, creators, and admins
+// Handles authentication, profile management, and access control
 model User {
   id                    Int                     @id @default(autoincrement())
   email                 String                  @unique
@@ -15,16 +20,31 @@ model User {
   password              String
   createdAt             DateTime                @default(now())
   updatedAt             DateTime                @updatedAt
+  
+  // Financial relations
   depositAddresses      deposit_addresses[]
   transactions          transactions[]
+  
+  // Creator-specific relations
   creatorProfile        creator_profiles?
   creatorToken          creator_token?
   creatorApplication    creator_applications?
   creatorDocuments      creator_documents[]
   creatorSocialLinks    creator_social_links[]
   verificationLogs      verification_logs[]
+  
+  // IPO relations
+  creatorIpo            creator_ipos?           // One IPO per creator
+  investments           ipo_investments[]       // Investments made by this user
+  reviewedIpos          creator_ipos[]          @relation("IpoReviewer") // IPOs reviewed by admin
 }
 
+// ============================================================================
+// FINANCIAL INFRASTRUCTURE
+// ============================================================================
+
+// Manages blockchain deposit addresses for users across different chains
+// Ensures unique address per user-chain-currency combination
 model deposit_addresses {
   id           String         @id @default(uuid())
   user_id      Int
@@ -42,6 +62,8 @@ model deposit_addresses {
   @@map("deposit_addresses")
 }
 
+// Tracks all financial transactions (deposits, withdrawals, transfers)
+// Links to blockchain confirmations and deposit addresses
 model transactions {
   id                 String             @id @default(uuid())
   wallet_id          String?
@@ -64,12 +86,18 @@ model transactions {
   @@map("transactions")
 }
 
+// ============================================================================
+// CREATOR PROFILES & VERIFICATION
+// ============================================================================
+
+// Public creator profile with token details and social presence
+// Created after successful verification process
 model creator_profiles {
   id                 String              @id @default(uuid())
   bio                String
   category           CreatorCategory
   status             CreatorStatus       @default(inactive)
-  wallet             String
+  wallet             String              // Blockchain wallet for receiving funds
   created_at         DateTime            @default(now())
   updated_at         DateTime            @updatedAt
   creator_handle     String              @unique
@@ -92,12 +120,14 @@ model creator_profiles {
   @@map("creator_profiles")
 }
 
+// Stores minted token details on blockchain
+// Links creator's token to their profile
 model creator_token {
   id           String   @id @default(uuid())
   name         String
   symbol       String   @unique
   total_supply BigInt
-  mintAddress  String   @unique
+  mintAddress  String   @unique          // Blockchain address of minted token
   user         User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
   user_id      Int      @unique
   created_at   DateTime @default(now())
@@ -107,28 +137,32 @@ model creator_token {
   @@map("creator_token")
 }
 
+// Tracks creator verification application workflow
+// Moves through states: pending_submission -> submitted -> under_review -> approved/rejected
 model creator_applications {
-  id                         String    @id @default(uuid())
+  id                         String           @id @default(uuid())
   state                      ApplicationState @default(pending_submission)
   rejection_reason           String?
-  submitted_at               DateTime  @default(now())
+  submitted_at               DateTime         @default(now())
   reviewed_at                DateTime?
   approved_at                DateTime?
-  content_ownership_declared Boolean   @default(false)
-  user_id                    Int       @unique
-  user                       User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  content_ownership_declared Boolean          @default(false)
+  user_id                    Int              @unique
+  user                       User             @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@index([user_id])
   @@index([state])
   @@map("creator_applications")
 }
 
+// KYC/KYB documents uploaded by creators for verification
+// Each document is reviewed independently by admins
 model creator_documents {
   id         String         @id @default(uuid())
   type       DocumentType
   file_url   String
   status     DocumentStatus @default(pending)
-  notes      String?
+  notes      String?         // Admin notes on document review
   created_at DateTime       @default(now())
   updated_at DateTime       @updatedAt
   user_id    Int
@@ -139,26 +173,30 @@ model creator_documents {
   @@map("creator_documents")
 }
 
+// Social media profiles linked to creator account
+// Used for verification and audience reach metrics
 model creator_social_links {
-  id             String       @id @default(uuid())
+  id             String         @id @default(uuid())
   platform       SocialPlatform
   handle         String
   url            String
-  verified       Boolean      @default(false)
-  created_at     DateTime     @default(now())
+  verified       Boolean        @default(false)
+  created_at     DateTime       @default(now())
   follower_count Int?
   user_id        Int
-  user           User         @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user           User           @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@index([user_id])
   @@map("creator_social_links")
 }
 
+// Audit trail for all verification actions
+// Tracks who did what and when during verification process
 model verification_logs {
   id         String   @id @default(uuid())
   action     String
-  actor      String
-  metadata   Json?
+  actor      String   // User ID or system identifier
+  metadata   Json?    // Additional context about the action
   created_at DateTime @default(now())
   user_id    Int
   user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
@@ -167,6 +205,139 @@ model verification_logs {
   @@index([created_at])
   @@map("verification_logs")
 }
+
+// ============================================================================
+// IPO (INITIAL PUBLIC OFFERING) SYSTEM
+// ============================================================================
+
+// Main IPO configuration created by verified creators
+// Contains all details needed for token sale including economics, timeline, and legal docs
+// Workflow: draft -> pending_review -> under_review -> approved -> live -> closed -> successful/failed
+model creator_ipos {
+  id                    String           @id @default(uuid())
+  user_id               Int              @unique // One IPO per creator
+  
+  // IPO Basic Information
+  title                 String
+  description           String           @db.Text
+  
+  // Token Economics & Sale Structure
+  total_tokens          BigInt           // Total token supply
+  tokens_for_sale       BigInt           // Amount available in this IPO
+  price_per_token       Decimal          @db.Decimal(18, 9)
+  min_purchase          Decimal          @db.Decimal(18, 9) // Minimum investment amount
+  max_purchase          Decimal?         @db.Decimal(18, 9) // Optional cap per investor
+  accepted_currencies   Currency[]       // Which currencies investors can use
+  
+  // Fundraising Targets
+  soft_cap              Decimal          @db.Decimal(18, 2) // Minimum to be considered successful
+  hard_cap              Decimal          @db.Decimal(18, 2) // Maximum fundraising limit
+  
+  // Timeline & Vesting
+  start_date            DateTime         // When IPO goes live
+  end_date              DateTime         // When IPO closes
+  vesting_period        Int?             // Total vesting duration in days
+  vesting_schedule      Json?            // Structure: {cliff: 90, duration: 365, intervals: 12}
+  
+  // Status & Approval Workflow
+  status                IpoStatus        @default(draft)
+  rejection_reason      String?          // Admin feedback if rejected
+  
+  // Project Planning
+  milestones            Json?            // Array of planned milestones with dates/descriptions
+  roadmap               String?          @db.Text
+  
+  // Financial Planning
+  use_of_funds          Json             // Breakdown: {development: 40%, marketing: 30%, operations: 30%}
+  
+  // Legal & Compliance Documents
+  terms_conditions      String           @db.Text
+  risk_disclosure       String           @db.Text
+  whitepaper_url        String?          // Link to project whitepaper
+  pitch_deck_url        String?          // Link to investor presentation
+  
+  // Admin Review Tracking
+  submitted_at          DateTime?        // When creator submitted for review
+  reviewed_at           DateTime?        // When admin last reviewed
+  approved_at           DateTime?        // When admin approved
+  launched_at           DateTime?        // When IPO went live
+  reviewed_by           Int?             // Admin user ID
+  
+  // Timestamps
+  created_at            DateTime         @default(now())
+  updated_at            DateTime         @updatedAt
+  
+  // Relations
+  user                  User             @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  reviewer              User?            @relation("IpoReviewer", fields: [reviewed_by], references: [id])
+  investments           ipo_investments[]
+  updates               ipo_updates[]
+  
+  @@index([user_id])
+  @@index([status])
+  @@index([start_date])
+  @@index([end_date])
+  @@map("creator_ipos")
+}
+
+// Individual investments made by users into IPOs
+// Tracks allocation, vesting, and claiming of tokens
+model ipo_investments {
+  id                    String              @id @default(uuid())
+  ipo_id                String
+  investor_id           Int
+  
+  // Investment Details
+  amount                Decimal             @db.Decimal(18, 9) // Amount invested in fiat/crypto
+  currency              Currency            // Which currency was used
+  tokens_allocated      BigInt              // Number of tokens purchased
+  
+  // Blockchain Transaction
+  transaction_hash      String?             // On-chain transaction ID
+  transaction_status    TransactionStatus   @default(pending)
+  
+  // Token Vesting & Claims
+  tokens_claimed        BigInt              @default(0) // How many tokens already claimed
+  last_claim_date       DateTime?           // Last time investor claimed tokens
+  next_claim_date       DateTime?           // When next claim is available
+  
+  // Timestamps
+  invested_at           DateTime            @default(now())
+  updated_at            DateTime            @updatedAt
+  
+  // Relations
+  ipo                   creator_ipos        @relation(fields: [ipo_id], references: [id], onDelete: Cascade)
+  investor              User                @relation(fields: [investor_id], references: [id], onDelete: Cascade)
+  
+  @@index([ipo_id])
+  @@index([investor_id])
+  @@index([transaction_status])
+  @@map("ipo_investments")
+}
+
+// Progress updates posted by creators to keep investors informed
+// Categorized by type for easy filtering
+model ipo_updates {
+  id          String       @id @default(uuid())
+  ipo_id      String
+  
+  title       String
+  content     String       @db.Text
+  type        UpdateType   @default(general)
+  
+  created_at  DateTime     @default(now())
+  
+  // Relations
+  ipo         creator_ipos @relation(fields: [ipo_id], references: [id], onDelete: Cascade)
+  
+  @@index([ipo_id])
+  @@index([created_at])
+  @@map("ipo_updates")
+}
+
+// ============================================================================
+// ENUMS
+// ============================================================================
 
 enum UserRole {
   investor
@@ -210,25 +381,25 @@ enum CreatorCategory {
 }
 
 enum CreatorStatus {
-  active
-  inactive
-  suspended
-  pending
+  active      // Creator is verified and active
+  inactive    // Creator account dormant
+  suspended   // Temporarily suspended by admin
+  pending     // Awaiting verification
 }
 
 enum ApplicationState {
-  pending_submission
-  submitted
-  under_review
-  approved
-  rejected
+  pending_submission // Creator hasn't submitted yet
+  submitted         // Submitted, waiting for admin
+  under_review      // Admin actively reviewing
+  approved          // Application approved
+  rejected          // Application rejected
 }
 
 enum DocumentType {
-  identity
-  proof_of_address
-  business_license
-  tax_document
+  identity          // Passport, driver's license, etc.
+  proof_of_address  // Utility bill, bank statement
+  business_license  // For business entities
+  tax_document      // Tax ID, EIN
   other
 }
 
@@ -246,4 +417,25 @@ enum SocialPlatform {
   linkedin
   facebook
   other
+}
+
+enum IpoStatus {
+  draft              // Creator still editing
+  pending_review     // Submitted, awaiting admin
+  under_review       // Admin reviewing
+  approved           // Approved, not yet launched
+  live               // Currently accepting investments
+  closed             // Ended, determining success
+  successful         // Reached soft cap
+  failed             // Did not reach soft cap
+  cancelled          // Cancelled by creator/admin
+  rejected           // Rejected by admin
+}
+
+enum UpdateType {
+  general       // General announcements
+  milestone     // Milestone achievements
+  financial     // Financial updates
+  technical     // Technical progress
+  announcement  // Important notices
 }
