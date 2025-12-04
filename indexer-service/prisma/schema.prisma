@@ -1,0 +1,243 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                   Int                    @id @default(autoincrement())
+  email                String                 @unique
+  name                 String
+  role                 String                 @default("user")
+  password             String
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime
+  creator_applications creator_applications?
+  creator_documents    creator_documents[]
+  creator_profiles     creator_profiles?
+  creator_social_links creator_social_links[]
+  creator_token        creator_token?
+  deposit_addresses    deposit_addresses[]
+  transactions         transactions[]
+  verification_logs    verification_logs[]
+}
+
+model creator_applications {
+  id                         String           @id
+  state                      ApplicationState @default(pending_submission)
+  rejection_reason           String?
+  submitted_at               DateTime         @default(now())
+  reviewed_at                DateTime?
+  approved_at                DateTime?
+  content_ownership_declared Boolean          @default(false)
+  user_id                    Int              @unique
+  User                       User             @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([state])
+  @@index([user_id])
+}
+
+model creator_documents {
+  id         String         @id
+  type       DocumentType
+  file_url   String
+  status     DocumentStatus @default(pending)
+  notes      String?
+  created_at DateTime       @default(now())
+  updated_at DateTime
+  user_id    Int
+  User       User           @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([user_id])
+}
+
+model creator_profiles {
+  id                 String          @id
+  bio                String
+  category           CreatorCategory
+  status             CreatorStatus   @default(inactive)
+  wallet             String
+  created_at         DateTime        @default(now())
+  updated_at         DateTime
+  creator_handle     String          @unique
+  custom_category    String?
+  engagement_metrics String?
+  full_name          String
+  funding_goal       Decimal?        @db.Decimal(18, 2)
+  ico_supply         BigInt?
+  phone_number       String?
+  profile_picture    String?
+  token_name         String
+  token_pitch        String
+  token_symbol       String          @unique
+  user_id            Int             @unique
+  User               User            @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([creator_handle])
+  @@index([token_symbol])
+  @@index([user_id])
+}
+
+model creator_social_links {
+  id             String         @id
+  platform       SocialPlatform
+  handle         String
+  url            String
+  verified       Boolean        @default(false)
+  created_at     DateTime       @default(now())
+  follower_count Int?
+  user_id        Int
+  User           User           @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+}
+
+model creator_token {
+  id           String   @id
+  name         String
+  symbol       String   @unique
+  total_supply BigInt
+  mintAddress  String   @unique
+  user_id      Int      @unique
+  created_at   DateTime @default(now())
+  updated_at   DateTime
+  User         User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+}
+
+model deposit_addresses {
+  id           String         @id
+  user_id      Int
+  chain        Chain
+  currency     Currency
+  address      String?        @unique
+  is_active    Boolean        @default(true)
+  created_at   DateTime       @default(now())
+  User         User           @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  transactions transactions[]
+
+  @@unique([user_id, chain, currency])
+  @@index([chain])
+  @@index([user_id])
+}
+
+model transactions {
+  id                 String             @id
+  wallet_id          String?
+  amount             Decimal            @db.Decimal(18, 9)
+  created_at         DateTime           @default(now())
+  blockchain_hash    String?
+  confirmations      Int?
+  deposit_address_id String?
+  status             TransactionStatus  @default(pending)
+  updated_at         DateTime
+  user_id            Int
+  type               TransactionType
+  chain              Chain
+  currency           Currency
+  deposit_addresses  deposit_addresses? @relation(fields: [deposit_address_id], references: [id])
+  User               User               @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([deposit_address_id])
+  @@index([user_id])
+  @@index([wallet_id])
+}
+
+model verification_logs {
+  id         String   @id
+  action     String
+  actor      String
+  metadata   Json?
+  created_at DateTime @default(now())
+  user_id    Int
+  User       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([created_at])
+  @@index([user_id])
+}
+
+enum ApplicationState {
+  pending_submission
+  submitted
+  under_review
+  approved
+  rejected
+}
+
+enum Chain {
+  solana
+  ethereum
+  polygon
+}
+
+enum CreatorCategory {
+  artist
+  musician
+  writer
+  developer
+  influencer
+  entrepreneur
+  other
+}
+
+enum CreatorStatus {
+  active
+  inactive
+  suspended
+  pending
+}
+
+enum Currency {
+  USDC
+  SOL
+  ETH
+  BTC
+}
+
+enum DocumentStatus {
+  pending
+  approved
+  rejected
+}
+
+enum DocumentType {
+  identity
+  proof_of_address
+  business_license
+  tax_document
+  other
+}
+
+enum SocialPlatform {
+  twitter
+  instagram
+  youtube
+  tiktok
+  linkedin
+  facebook
+  other
+}
+
+enum TransactionStatus {
+  pending
+  confirmed
+  failed
+}
+
+enum TransactionType {
+  deposit
+  withdrawal
+  transfer
+}
+
+enum UserRole {
+  investor
+  creator
+  admin
+}

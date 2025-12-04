@@ -10,3 +10,5 @@ src/configs/configs.yml
 
 target/
 
+
+/src/generated/prisma
