@@ -8,7 +8,7 @@ import AuthRequest from "../types/authRequest.type.js";
 class CreatorOnboardingController {
   // Step 1: Submit initial creator application
   static submitApplication = async (req: AuthRequest, res: Response) => {
-    const userId = req.userId;
+    const userId = req.user?.userId;
     
     if (!userId) {
       return Send.error(res, null, "Unauthorized.");
@@ -46,7 +46,7 @@ class CreatorOnboardingController {
 
   // Step 2: Create creator profile
   static createProfile = async (req: AuthRequest, res: Response) => {
-    const userId = req.userId;
+    const userId = req.user?.userId;
     
     if (!userId) {
       return Send.error(res, null, "Unauthorized.");
@@ -127,7 +127,7 @@ class CreatorOnboardingController {
 
   // Step 3: Upload documents
   static uploadDocument = async (req: AuthRequest, res: Response) => {
-    const userId = req.userId;
+    const userId = req.user?.userId;
     
     if (!userId) {
       return Send.error(res, null, "Unauthorized.");
@@ -170,7 +170,7 @@ class CreatorOnboardingController {
 
   // Step 4: Add social links
   static addSocialLink = async (req: AuthRequest, res: Response) => {
-    const userId = req.userId;
+    const userId = req.user?.userId;
     
     if (!userId) {
       return Send.error(res, null, "Unauthorized.");
@@ -214,7 +214,7 @@ class CreatorOnboardingController {
 
   // Get creator profile
   static getProfile = async (req: AuthRequest, res: Response) => {
-    const userId = req.userId;
+    const userId = req.user?.userId;
     
     if (!userId) {
       return Send.error(res, null, "Unauthorized.");
@@ -246,7 +246,7 @@ class CreatorOnboardingController {
 
   // Get application status
   static getApplicationStatus = async (req: AuthRequest, res: Response) => {
-    const userId = req.userId;
+    const userId = req.user?.userId;
     
     if (!userId) {
       return Send.error(res, null, "Unauthorized.");
@@ -276,7 +276,7 @@ class CreatorOnboardingController {
 
   // Get all documents
   static getDocuments = async (req: AuthRequest, res: Response) => {
-    const userId = req.userId;
+    const userId = req.user?.userId;
     
     if (!userId) {
       return Send.error(res, null, "Unauthorized.");
@@ -296,7 +296,7 @@ class CreatorOnboardingController {
 
   // Get all social links
   static getSocialLinks = async (req: AuthRequest, res: Response) => {
-    const userId = req.userId;
+    const userId = req.user?.userId;
     
     if (!userId) {
       return Send.error(res, null, "Unauthorized.");
@@ -316,7 +316,7 @@ class CreatorOnboardingController {
 
   // Update profile
   static updateProfile = async (req: AuthRequest, res: Response) => {
-    const userId = req.userId;
+    const userId = req.user?.userId;
     
     if (!userId) {
       return Send.error(res, null, "Unauthorized.");
@@ -351,7 +351,7 @@ class CreatorOnboardingController {
 
   // Delete social link
   static deleteSocialLink = async (req: AuthRequest, res: Response) => {
-    const userId = req.userId;
+    const userId = req.user?.userId;
     const { id } = req.params;
     
     if (!userId) {
@@ -382,7 +382,7 @@ class CreatorOnboardingController {
 
   // Get onboarding progress
   static getOnboardingProgress = async (req: AuthRequest, res: Response) => {
-    const userId = req.userId;
+    const userId = req.user?.userId;
     
     if (!userId) {
       return Send.error(res, null, "Unauthorized.");

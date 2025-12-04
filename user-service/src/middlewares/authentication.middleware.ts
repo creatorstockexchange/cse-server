@@ -33,7 +33,7 @@ const authMiddleware = (req: AuthRequest, res: Response, next: NextFunction) => 
             });
         }
 
-        req.user = decoded as { userId: string };
+        req.user = decoded as { userId: number };
         next();
     } catch (error) {
         return res.status(statusCode.UNAUTHORIZED).json({
