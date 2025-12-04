@@ -5,3 +5,5 @@ dist/
 
 src/configs/*.config.yml
 /src/generated/prisma
+
+/src/generated/prisma
