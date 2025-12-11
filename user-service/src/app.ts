@@ -8,6 +8,7 @@ import { requestLogger } from "./middlewares/logging.middleware.js";
 import logger from "./utils/logger.js";
 import authRoutes from "./routes/auth.routes.js";
 import depositRoutes from "./routes/deposit.routes.js"
+import ipoRoutes from "./routes/ipo.routes.js";
 
 import { port, corsOrigin } from "./config.js";
 
@@ -32,6 +33,7 @@ app.use('/auth', authRoutes);
 // authenticated routes
 app.use(authMiddleware);
 app.use('/deposit', depositRoutes)
+app.use('/ipo', ipoRoutes);
 
 app.use('/metrics', async (req, res) => {
     const metrics = await client.register.metrics();
