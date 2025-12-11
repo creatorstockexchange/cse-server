@@ -1,5 +1,5 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
+use anchor_spl::token::{self, Mint, Token, TokenAccount};
 
 declare_id!("24GqRtqWAoSqNvEmBtSvdRzTmU9F7dzKRSUfiebxZnye");
 
@@ -68,9 +68,10 @@ pub mod token_bonding_curve {
         )?;
 
         // Mint tokens to buyer
+        let creator_id_bytes = bonding_curve.creator_id.to_le_bytes();
         let seeds = &[
             b"bonding_curve",
-            bonding_curve.creator_id.to_le_bytes().as_ref(),
+            creator_id_bytes.as_ref(),
             &[bonding_curve.bump],
         ];
         let signer = &[&seeds[..]];
@@ -80,7 +81,7 @@ pub mod token_bonding_curve {
             token::MintTo {
                 mint: ctx.accounts.token_mint.to_account_info(),
                 to: ctx.accounts.buyer_token_account.to_account_info(),
-                authority: ctx.accounts.bonding_curve.to_account_info(),
+                authority: bonding_curve.to_account_info(),
             },
             signer,
         );
