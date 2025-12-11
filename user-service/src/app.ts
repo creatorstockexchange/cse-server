@@ -7,16 +7,18 @@ import { prometheusMiddleware } from "./middlewares/prometheus.middleware.js";
 import { requestLogger } from "./middlewares/logging.middleware.js";
 import logger from "./utils/logger.js";
 import authRoutes from "./routes/auth.routes.js";
-import depositRoutes from "./routes/deposit.routes.js"
+import depositRoutes from "./routes/deposit.routes.js";
 
 import { port, corsOrigin } from "./config.js";
 
 const app = express();
 
-app.use(cors({
+app.use(
+  cors({
     origin: corsOrigin,
     credentials: true,
-}));
+  })
+);
 
 app.use(prometheusMiddleware);
 
@@ -27,19 +29,19 @@ app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-app.use('/auth', authRoutes);
+app.use("/api/auth", authRoutes);
 
 // authenticated routes
 app.use(authMiddleware);
-app.use('/deposit', depositRoutes)
+app.use("/deposit", depositRoutes);
 
-app.use('/metrics', async (req, res) => {
-    const metrics = await client.register.metrics();
-    res.set("Content-Type", client.register.contentType);
-    res.end(metrics);
-})
+app.use("/metrics", async (req, res) => {
+  const metrics = await client.register.metrics();
+  res.set("Content-Type", client.register.contentType);
+  res.end(metrics);
+});
 
 export async function startServer() {
-    app.listen(port);
-    logger.info("Server listening", { port });
-};
+  app.listen(port);
+  logger.info("Server listening", { port });
+}
