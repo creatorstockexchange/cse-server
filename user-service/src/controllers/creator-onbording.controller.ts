@@ -6,15 +6,13 @@ import Send from "../utils/response.utils.js";
 import AuthRequest from "../types/authRequest.type.js";
 
 class CreatorOnboardingController {
-  // Step 1: Submit initial creator application
-  static submitApplication = async (req: AuthRequest, res: Response) => {
+  static submitCompleteApplication = async (req: AuthRequest, res: Response) => {
     const userId = req.user?.userId;
-    
     if (!userId) {
       return Send.error(res, null, "Unauthorized.");
     }
 
-    const { contentOwnershipDeclared } = req.body as z.infer<typeof creatorSchema.submitApplication>;
+    const submissionData = req.body as z.infer<typeof creatorSchema.completeSubmission>;
 
     try {
       // Check if user already has an application
@@ -26,60 +24,9 @@ class CreatorOnboardingController {
         return Send.error(res, null, "Application already exists.");
       }
 
-      const application = await prisma.creator_applications.create({
-        data: {
-          user_id: userId,
-          content_ownership_declared: contentOwnershipDeclared,
-          state: "submitted"
-        }
-      });
-
-      return Send.success(res, {
-        id: application.id,
-        state: application.state,
-        submittedAt: application.submitted_at
-      });
-    } catch (error) {
-      return Send.error(res, null, "Failed to submit application.");
-    }
-  };
-
-  // Step 2: Create creator profile
-  static createProfile = async (req: AuthRequest, res: Response) => {
-    const userId = req.user?.userId;
-    
-    if (!userId) {
-      return Send.error(res, null, "Unauthorized.");
-    }
-
-    const profileData = req.body as z.infer<typeof creatorSchema.createProfile>;
-
-    try {
-      // Check if application exists and is approved
-      const application = await prisma.creator_applications.findFirst({
-        where: { user_id: userId }
-      });
-
-      if (!application) {
-        return Send.error(res, null, "No application found. Please submit an application first.");
-      }
-
-      if (application.state !== "approved") {
-        return Send.error(res, null, "Application must be approved before creating profile.");
-      }
-
-      // Check if profile already exists
-      const existingProfile = await prisma.creator_profiles.findFirst({
-        where: { user_id: userId }
-      });
-
-      if (existingProfile) {
-        return Send.error(res, null, "Creator profile already exists.");
-      }
-
       // Check if creator_handle or token_symbol is already taken
       const handleExists = await prisma.creator_profiles.findFirst({
-        where: { creator_handle: profileData.creatorHandle }
+        where: { creator_handle: submissionData.profile.creatorHandle }
       });
 
       if (handleExists) {
@@ -87,167 +34,131 @@ class CreatorOnboardingController {
       }
 
       const symbolExists = await prisma.creator_profiles.findFirst({
-        where: { token_symbol: profileData.tokenSymbol }
+        where: { token_symbol: submissionData.profile.tokenSymbol }
       });
 
       if (symbolExists) {
         return Send.error(res, null, "Token symbol already taken.");
       }
 
-      const profile = await prisma.creator_profiles.create({
-        data: {
-          user_id: userId,
-          full_name: profileData.fullName,
-          creator_handle: profileData.creatorHandle,
-          bio: profileData.bio,
-          category: profileData.category,
-          custom_category: profileData.customCategory,
-          token_name: profileData.tokenName,
-          token_symbol: profileData.tokenSymbol,
-          token_pitch: profileData.tokenPitch,
-          funding_goal: profileData.fundingGoal,
-          ico_supply: profileData.icoSupply,
-          wallet: profileData.wallet,
-          phone_number: profileData.phoneNumber,
-          profile_picture: profileData.profilePicture,
-          status: "inactive"
-        }
-      });
-
-      return Send.success(res, {
-        id: profile.id,
-        creatorHandle: profile.creator_handle,
-        tokenSymbol: profile.token_symbol,
-        status: profile.status
-      });
-    } catch (error) {
-      return Send.error(res, null, "Failed to create creator profile.");
-    }
-  };
-
-  // Step 3: Upload documents
-  static uploadDocument = async (req: AuthRequest, res: Response) => {
-    const userId = req.user?.userId;
-    
-    if (!userId) {
-      return Send.error(res, null, "Unauthorized.");
-    }
-
-    const documentData = req.body as z.infer<typeof creatorSchema.uploadDocument>;
-
-    try {
-      const document = await prisma.creator_documents.create({
-        data: {
-          user_id: userId,
-          type: documentData.type,
-          file_url: documentData.fileUrl,
-          notes: documentData.notes
-        }
-      });
-
-      // Log the action
-      await prisma.verification_logs.create({
-        data: {
-          user_id: userId,
-          action: "document_uploaded",
-          actor: `user_${userId}`,
-          metadata: {
-            documentId: document.id,
-            documentType: document.type
-          }
-        }
-      });
-
-      return Send.success(res, {
-        id: document.id,
-        type: document.type,
-        status: document.status
-      });
-    } catch (error) {
-      return Send.error(res, null, "Failed to upload document.");
-    }
-  };
-
-  // Step 4: Add social links
-  static addSocialLink = async (req: AuthRequest, res: Response) => {
-    const userId = req.user?.userId;
-    
-    if (!userId) {
-      return Send.error(res, null, "Unauthorized.");
-    }
-
-    const socialData = req.body as z.infer<typeof creatorSchema.addSocialLink>;
-
-    try {
-      // Check if social link already exists for this platform
-      const existingLink = await prisma.creator_social_links.findFirst({
-        where: {
-          user_id: userId,
-          platform: socialData.platform
-        }
-      });
-
-      if (existingLink) {
-        return Send.error(res, null, `Social link for ${socialData.platform} already exists.`);
+      // Check for duplicate social platforms
+      const platforms = submissionData.socialLinks.map(link => link.platform);
+      const uniquePlatforms = new Set(platforms);
+      if (platforms.length !== uniquePlatforms.size) {
+        return Send.error(res, null, "Duplicate social media platforms found.");
       }
 
-      const socialLink = await prisma.creator_social_links.create({
-        data: {
-          user_id: userId,
-          platform: socialData.platform,
-          handle: socialData.handle,
-          url: socialData.url,
-          follower_count: socialData.followerCount
-        }
-      });
+      // Use transaction to ensure all data is saved together
+      const result = await prisma.$transaction(async (tx: any) => {
+        // 1. Create application
+        const application = await tx.creator_applications.create({
+          data: {
+            user_id: userId,
+            content_ownership_declared: submissionData.contentOwnershipDeclared,
+            state: "pending_review"
+          }
+        });
 
-      return Send.success(res, {
-        id: socialLink.id,
-        platform: socialLink.platform,
-        handle: socialLink.handle,
-        verified: socialLink.verified
-      });
-    } catch (error) {
-      return Send.error(res, null, "Failed to add social link.");
-    }
-  };
+        // 2. Create profile (in draft state until approved)
+        const profile = await tx.creator_profiles.create({
+          data: {
+            user_id: userId,
+            full_name: submissionData.profile.fullName,
+            creator_handle: submissionData.profile.creatorHandle,
+            bio: submissionData.profile.bio,
+            category: submissionData.profile.category,
+            custom_category: submissionData.profile.customCategory,
+            token_name: submissionData.profile.tokenName,
+            token_symbol: submissionData.profile.tokenSymbol,
+            token_pitch: submissionData.profile.tokenPitch,
+            funding_goal: submissionData.profile.fundingGoal,
+            ico_supply: submissionData.profile.icoSupply,
+            wallet: submissionData.profile.wallet,
+            phone_number: submissionData.profile.phoneNumber,
+            profile_picture: submissionData.profile.profilePicture,
+            status: "pending"
+          }
+        });
 
-  // Get creator profile
-  static getProfile = async (req: AuthRequest, res: Response) => {
-    const userId = req.user?.userId;
-    
-    if (!userId) {
-      return Send.error(res, null, "Unauthorized.");
-    }
+        // 3. Create documents
+        const documents = await Promise.all(
+          submissionData.documents.map(doc =>
+            tx.creator_documents.create({
+              data: {
+                user_id: userId,
+                type: doc.type,
+                file_url: doc.fileUrl,
+                notes: doc.notes,
+                status: "pending"
+              }
+            })
+          )
+        );
 
-    try {
-      const profile = await prisma.creator_profiles.findFirst({
-        where: { user_id: userId },
-        include: {
-          user: {
-            select: {
-              id: true,
-              name: true,
-              email: true
+        // 4. Create social links
+        const socialLinks = await Promise.all(
+          submissionData.socialLinks.map(link =>
+            tx.creator_social_links.create({
+              data: {
+                user_id: userId,
+                platform: link.platform,
+                handle: link.handle,
+                url: link.url,
+                follower_count: link.followerCount,
+                verified: false
+              }
+            })
+          )
+        );
+
+        // 5. Create verification log
+        await tx.verification_logs.create({
+          data: {
+            user_id: userId,
+            action: "complete_application_submitted",
+            actor: `user_${userId}`,
+            metadata: {
+              applicationId: application.id,
+              profileId: profile.id,
+              documentCount: documents.length,
+              socialLinkCount: socialLinks.length
             }
           }
-        }
+        });
+
+        return {
+          application,
+          profile,
+          documents,
+          socialLinks
+        };
       });
 
-      if (!profile) {
-        return Send.error(res, null, "Creator profile not found.");
-      }
-
-      return Send.success(res, profile);
+      return Send.success(res, {
+        message: "Application submitted successfully and pending review.",
+        application: {
+          id: result.application.id,
+          state: result.application.state,
+          submittedAt: result.application.submitted_at
+        },
+        profile: {
+          id: result.profile.id,
+          creatorHandle: result.profile.creator_handle,
+          tokenSymbol: result.profile.token_symbol,
+          status: result.profile.status
+        },
+        documentsCount: result.documents.length,
+        socialLinksCount: result.socialLinks.length
+      });
     } catch (error) {
-      return Send.error(res, null, "Failed to fetch creator profile.");
+      console.error("Complete application submission error:", error);
+      return Send.error(res, null, "Failed to submit application.");
     }
   };
 
-  // Get application status
-  static getApplicationStatus = async (req: AuthRequest, res: Response) => {
+  // Get complete application details
+  static getApplicationDetails = async (req: AuthRequest, res: Response) => {
     const userId = req.user?.userId;
-    
     if (!userId) {
       return Send.error(res, null, "Unauthorized.");
     }
@@ -261,129 +172,197 @@ class CreatorOnboardingController {
         return Send.error(res, null, "No application found.");
       }
 
-      return Send.success(res, {
-        id: application.id,
-        state: application.state,
-        submittedAt: application.submitted_at,
-        reviewedAt: application.reviewed_at,
-        approvedAt: application.approved_at,
-        rejectionReason: application.rejection_reason
+      const profile = await prisma.creator_profiles.findFirst({
+        where: { user_id: userId },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true
+            }
+          }
+        }
       });
-    } catch (error) {
-      return Send.error(res, null, "Failed to fetch application status.");
-    }
-  };
 
-  // Get all documents
-  static getDocuments = async (req: AuthRequest, res: Response) => {
-    const userId = req.user?.userId;
-    
-    if (!userId) {
-      return Send.error(res, null, "Unauthorized.");
-    }
-
-    try {
       const documents = await prisma.creator_documents.findMany({
         where: { user_id: userId },
         orderBy: { created_at: 'desc' }
       });
 
-      return Send.success(res, documents);
-    } catch (error) {
-      return Send.error(res, null, "Failed to fetch documents.");
-    }
-  };
-
-  // Get all social links
-  static getSocialLinks = async (req: AuthRequest, res: Response) => {
-    const userId = req.user?.userId;
-    
-    if (!userId) {
-      return Send.error(res, null, "Unauthorized.");
-    }
-
-    try {
       const socialLinks = await prisma.creator_social_links.findMany({
         where: { user_id: userId },
         orderBy: { created_at: 'desc' }
       });
 
-      return Send.success(res, socialLinks);
+      return Send.success(res, {
+        application: {
+          id: application.id,
+          state: application.state,
+          contentOwnershipDeclared: application.content_ownership_declared,
+          submittedAt: application.submitted_at,
+          reviewedAt: application.reviewed_at,
+          approvedAt: application.approved_at,
+          rejectionReason: application.rejection_reason
+        },
+        profile,
+        documents,
+        socialLinks
+      });
     } catch (error) {
-      return Send.error(res, null, "Failed to fetch social links.");
+      return Send.error(res, null, "Failed to fetch application details.");
     }
   };
 
-  // Update profile
-  static updateProfile = async (req: AuthRequest, res: Response) => {
+  // Update pending application (only if not yet reviewed)
+  static updateApplication = async (req: AuthRequest, res: Response) => {
     const userId = req.user?.userId;
-    
     if (!userId) {
       return Send.error(res, null, "Unauthorized.");
     }
 
-    const updateData = req.body as z.infer<typeof creatorSchema.updateProfile>;
+    const updateData = req.body as z.infer<typeof creatorSchema.completeSubmission>;
 
     try {
+      const application = await prisma.creator_applications.findFirst({
+        where: { user_id: userId }
+      });
+
+      if (!application) {
+        return Send.error(res, null, "No application found.");
+      }
+
+      if (application.state !== "pending_review") {
+        return Send.error(res, null, "Cannot update application after review has started.");
+      }
+
       const profile = await prisma.creator_profiles.findFirst({
         where: { user_id: userId }
       });
 
       if (!profile) {
-        return Send.error(res, null, "Creator profile not found.");
+        return Send.error(res, null, "Profile not found.");
       }
 
-      const updatedProfile = await prisma.creator_profiles.update({
-        where: { id: profile.id },
-        data: {
-          bio: updateData.bio,
-          phone_number: updateData.phoneNumber,
-          profile_picture: updateData.profilePicture,
-          engagement_metrics: updateData.engagementMetrics
+      // Check if new handle/symbol conflicts with others (excluding own)
+      if (updateData.profile.creatorHandle !== profile.creator_handle) {
+        const handleExists = await prisma.creator_profiles.findFirst({
+          where: { 
+            creator_handle: updateData.profile.creatorHandle,
+            user_id: { not: userId }
+          }
+        });
+
+        if (handleExists) {
+          return Send.error(res, null, "Creator handle already taken.");
         }
+      }
+
+      if (updateData.profile.tokenSymbol !== profile.token_symbol) {
+        const symbolExists = await prisma.creator_profiles.findFirst({
+          where: { 
+            token_symbol: updateData.profile.tokenSymbol,
+            user_id: { not: userId }
+          }
+        });
+
+        if (symbolExists) {
+          return Send.error(res, null, "Token symbol already taken.");
+        }
+      }
+
+      const result = await prisma.$transaction(async (tx: any) => {
+        // Update profile
+        const updatedProfile = await tx.creator_profiles.update({
+          where: { id: profile.id },
+          data: {
+            full_name: updateData.profile.fullName,
+            creator_handle: updateData.profile.creatorHandle,
+            bio: updateData.profile.bio,
+            category: updateData.profile.category,
+            custom_category: updateData.profile.customCategory,
+            token_name: updateData.profile.tokenName,
+            token_symbol: updateData.profile.tokenSymbol,
+            token_pitch: updateData.profile.tokenPitch,
+            funding_goal: updateData.profile.fundingGoal,
+            ico_supply: updateData.profile.icoSupply,
+            wallet: updateData.profile.wallet,
+            phone_number: updateData.profile.phoneNumber,
+            profile_picture: updateData.profile.profilePicture
+          }
+        });
+
+        // Delete and recreate documents
+        await tx.creator_documents.deleteMany({
+          where: { user_id: userId }
+        });
+
+        const documents = await Promise.all(
+          updateData.documents.map(doc =>
+            tx.creator_documents.create({
+              data: {
+                user_id: userId,
+                type: doc.type,
+                file_url: doc.fileUrl,
+                notes: doc.notes,
+                status: "pending"
+              }
+            })
+          )
+        );
+
+        // Delete and recreate social links
+        await tx.creator_social_links.deleteMany({
+          where: { user_id: userId }
+        });
+
+        const socialLinks = await Promise.all(
+          updateData.socialLinks.map(link =>
+            tx.creator_social_links.create({
+              data: {
+                user_id: userId,
+                platform: link.platform,
+                handle: link.handle,
+                url: link.url,
+                follower_count: link.followerCount,
+                verified: false
+              }
+            })
+          )
+        );
+
+        // Log the update
+        await tx.verification_logs.create({
+          data: {
+            user_id: userId,
+            action: "application_updated",
+            actor: `user_${userId}`,
+            metadata: {
+              profileId: updatedProfile.id,
+              documentCount: documents.length,
+              socialLinkCount: socialLinks.length
+            }
+          }
+        });
+
+        return { updatedProfile, documents, socialLinks };
       });
 
-      return Send.success(res, updatedProfile);
+      return Send.success(res, {
+        message: "Application updated successfully.",
+        profile: result.updatedProfile,
+        documentsCount: result.documents.length,
+        socialLinksCount: result.socialLinks.length
+      });
     } catch (error) {
-      return Send.error(res, null, "Failed to update profile.");
+      console.error("Application update error:", error);
+      return Send.error(res, null, "Failed to update application.");
     }
   };
 
-  // Delete social link
-  static deleteSocialLink = async (req: AuthRequest, res: Response) => {
+  // Withdraw application
+  static withdrawApplication = async (req: AuthRequest, res: Response) => {
     const userId = req.user?.userId;
-    const { id } = req.params;
-    
-    if (!userId) {
-      return Send.error(res, null, "Unauthorized.");
-    }
-
-    try {
-      const socialLink = await prisma.creator_social_links.findFirst({
-        where: {
-          id,
-          user_id: userId
-        }
-      });
-
-      if (!socialLink) {
-        return Send.error(res, null, "Social link not found.");
-      }
-
-      await prisma.creator_social_links.delete({
-        where: { id }
-      });
-
-      return Send.success(res, { message: "Social link deleted successfully." });
-    } catch (error) {
-      return Send.error(res, null, "Failed to delete social link.");
-    }
-  };
-
-  // Get onboarding progress
-  static getOnboardingProgress = async (req: AuthRequest, res: Response) => {
-    const userId = req.user?.userId;
-    
     if (!userId) {
       return Send.error(res, null, "Unauthorized.");
     }
@@ -393,41 +372,73 @@ class CreatorOnboardingController {
         where: { user_id: userId }
       });
 
-      const profile = await prisma.creator_profiles.findFirst({
-        where: { user_id: userId }
+      if (!application) {
+        return Send.error(res, null, "No application found.");
+      }
+
+      if (application.state === "approved") {
+        return Send.error(res, null, "Cannot withdraw an approved application.");
+      }
+
+      await prisma.$transaction(async (tx: any) => {
+        // Delete all related data
+        await tx.creator_social_links.deleteMany({ where: { user_id: userId } });
+        await tx.creator_documents.deleteMany({ where: { user_id: userId } });
+        await tx.creator_profiles.deleteMany({ where: { user_id: userId } });
+        await tx.creator_applications.delete({ where: { id: application.id } });
+
+        // Log withdrawal
+        await tx.verification_logs.create({
+          data: {
+            user_id: userId,
+            action: "application_withdrawn",
+            actor: `user_${userId}`,
+            metadata: {
+              applicationId: application.id,
+              previousState: application.state
+            }
+          }
+        });
       });
 
-      const documents = await prisma.creator_documents.findMany({
-        where: { user_id: userId }
-      });
-
-      const socialLinks = await prisma.creator_social_links.findMany({
-        where: { user_id: userId }
-      });
-
-      const progress = {
-        applicationSubmitted: !!application,
-        applicationApproved: application?.state === "approved",
-        profileCreated: !!profile,
-        documentsUploaded: documents.length > 0,
-        socialLinksAdded: socialLinks.length > 0,
-        completionPercentage: 0
-      };
-
-      let completed = 0;
-      const total = 5;
-
-      if (progress.applicationSubmitted) completed++;
-      if (progress.applicationApproved) completed++;
-      if (progress.profileCreated) completed++;
-      if (progress.documentsUploaded) completed++;
-      if (progress.socialLinksAdded) completed++;
-
-      progress.completionPercentage = Math.round((completed / total) * 100);
-
-      return Send.success(res, progress);
+      return Send.success(res, { message: "Application withdrawn successfully." });
     } catch (error) {
-      return Send.error(res, null, "Failed to fetch onboarding progress.");
+      return Send.error(res, null, "Failed to withdraw application.");
+    }
+  };
+
+  // Check application status
+  static checkStatus = async (req: AuthRequest, res: Response) => {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return Send.error(res, null, "Unauthorized.");
+    }
+
+    try {
+      const application = await prisma.creator_applications.findFirst({
+        where: { user_id: userId }
+      });
+
+      if (!application) {
+        return Send.success(res, {
+          hasApplication: false,
+          canApply: true
+        });
+      }
+
+      return Send.success(res, {
+        hasApplication: true,
+        canApply: false,
+        state: application.state,
+        submittedAt: application.submitted_at,
+        reviewedAt: application.reviewed_at,
+        approvedAt: application.approved_at,
+        rejectionReason: application.rejection_reason,
+        canUpdate: application.state === "pending_review",
+        canWithdraw: application.state !== "approved"
+      });
+    } catch (error) {
+      return Send.error(res, null, "Failed to check application status.");
     }
   };
 }

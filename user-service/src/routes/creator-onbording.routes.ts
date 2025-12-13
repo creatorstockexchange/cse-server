@@ -6,66 +6,34 @@ import creatorSchema from "../schemas/creator.schema.js";
 
 const router = Router();
 
+// Apply authentication to all routes
 router.use(authMiddleware);
 
 router.post(
   "/application",
-  validate(creatorSchema.submitApplication),
-  CreatorOnboardingController.submitApplication
+  validate(creatorSchema.completeSubmission),
+  CreatorOnboardingController.submitCompleteApplication
+);
+
+router.get(
+  "/application",
+  CreatorOnboardingController.getApplicationDetails
+);
+
+router.put(
+  "/application",
+  validate(creatorSchema.updateApplication),
+  CreatorOnboardingController.updateApplication
+);
+
+router.delete(
+  "/application",
+  CreatorOnboardingController.withdrawApplication
 );
 
 router.get(
   "/application/status",
-  CreatorOnboardingController.getApplicationStatus
-);
-
-router.post(
-  "/profile",
-  validate(creatorSchema.createProfile),
-  CreatorOnboardingController.createProfile
-);
-
-router.get(
-  "/profile",
-  CreatorOnboardingController.getProfile
-);
-
-router.patch(
-  "/profile",
-  validate(creatorSchema.updateProfile),
-  CreatorOnboardingController.updateProfile
-);
-
-router.post(
-  "/documents",
-  validate(creatorSchema.uploadDocument),
-  CreatorOnboardingController.uploadDocument
-);
-
-router.get(
-  "/documents",
-  CreatorOnboardingController.getDocuments
-);
-
-router.post(
-  "/social-links",
-  validate(creatorSchema.addSocialLink),
-  CreatorOnboardingController.addSocialLink
-);
-
-router.get(
-  "/social-links",
-  CreatorOnboardingController.getSocialLinks
-);
-
-router.delete(
-  "/social-links/:id",
-  CreatorOnboardingController.deleteSocialLink
-);
-
-router.get(
-  "/progress",
-  CreatorOnboardingController.getOnboardingProgress
+  CreatorOnboardingController.checkStatus
 );
 
 export default router;

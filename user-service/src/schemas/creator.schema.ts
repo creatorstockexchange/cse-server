@@ -1,277 +1,170 @@
 import { z } from "zod";
 
-// Enums matching Prisma schema
-const CreatorCategoryEnum = z.enum([
-  "artist",
-  "musician",
-  "writer",
-  "developer",
-  "influencer",
-  "entrepreneur",
-  "other"
-]);
+// Individual schemas for reusability
+const profileSchema = z.object({
+  fullName: z.string().min(2, "Full name must be at least 2 characters").max(100),
+  creatorHandle: z
+    .string()
+    .min(3, "Handle must be at least 3 characters")
+    .max(30)
+    .regex(/^[a-zA-Z0-9_]+$/, "Handle can only contain letters, numbers, and underscores"),
+  bio: z.string().min(50, "Bio must be at least 50 characters").max(500),
+  category: z.enum([
+    "technology",
+    "gaming",
+    "music",
+    "art",
+    "education",
+    "lifestyle",
+    "sports",
+    "comedy",
+    "science",
+    "business",
+    "other"
+  ]),
+  customCategory: z.string().max(50).optional().nullable(),
+  tokenName: z.string().min(3, "Token name must be at least 3 characters").max(50),
+  tokenSymbol: z
+    .string()
+    .min(2, "Token symbol must be at least 2 characters")
+    .max(10)
+    .regex(/^[A-Z]+$/, "Token symbol must be uppercase letters only"),
+  tokenPitch: z.string().min(100, "Token pitch must be at least 100 characters").max(1000),
+  fundingGoal: z
+    .number()
+    .positive("Funding goal must be positive")
+    .min(1000, "Minimum funding goal is 1000")
+    .max(10000000, "Maximum funding goal is 10,000,000"),
+  icoSupply: z
+    .number()
+    .positive("ICO supply must be positive")
+    .min(1000, "Minimum ICO supply is 1000")
+    .max(1000000000, "Maximum ICO supply is 1,000,000,000"),
+  wallet: z.string().regex(/^0x[a-fA-F0-9]{40}$/, "Invalid wallet address"),
+  phoneNumber: z
+    .string()
+    .regex(/^\+?[1-9]\d{1,14}$/, "Invalid phone number format")
+    .optional()
+    .nullable(),
+  profilePicture: z.string().url("Invalid profile picture URL").optional().nullable()
+});
 
-const DocumentTypeEnum = z.enum([
-  "identity",
-  "proof_of_address",
-  "business_license",
-  "tax_document",
-  "other"
-]);
+const documentSchema = z.object({
+  type: z.enum([
+    "identity_proof",
+    "address_proof",
+    "content_ownership",
+    "tax_document",
+    "business_registration",
+    "other"
+  ]),
+  fileUrl: z.string().url("Invalid file URL"),
+  notes: z.string().max(500).optional().nullable()
+});
 
-const SocialPlatformEnum = z.enum([
-  "twitter",
-  "instagram",
-  "youtube",
-  "tiktok",
-  "linkedin",
-  "facebook",
-  "other"
-]);
+const socialLinkSchema = z.object({
+  platform: z.enum([
+    "youtube",
+    "instagram",
+    "tiktok",
+    "twitter",
+    "twitch",
+    "facebook",
+    "linkedin",
+    "spotify",
+    "soundcloud",
+    "other"
+  ]),
+  handle: z.string().min(1, "Handle is required").max(100),
+  url: z.string().url("Invalid URL"),
+  followerCount: z.number().int().min(0).optional().nullable()
+});
 
-// Application Schemas
+// Main complete submission schema
+const completeSubmission = z.object({
+  contentOwnershipDeclared: z.boolean().refine((val) => val === true, {
+    message: "You must declare content ownership to proceed"
+  }),
+  profile: profileSchema,
+  documents: z
+    .array(documentSchema)
+    .min(1, "At least one document is required")
+    .max(10, "Maximum 10 documents allowed"),
+  socialLinks: z
+    .array(socialLinkSchema)
+    .min(1, "At least one social link is required")
+    .max(10, "Maximum 10 social links allowed")
+});
+
+// Update application schema (similar to complete but more flexible)
+const updateApplication = z.object({
+  contentOwnershipDeclared: z.boolean().refine((val) => val === true, {
+    message: "Content ownership declaration is required"
+  }),
+  profile: profileSchema,
+  documents: z
+    .array(documentSchema)
+    .min(1, "At least one document is required")
+    .max(10, "Maximum 10 documents allowed"),
+  socialLinks: z
+    .array(socialLinkSchema)
+    .min(1, "At least one social link is required")
+    .max(10, "Maximum 10 social links allowed")
+});
+
+// Legacy/individual schemas (if still needed for other endpoints)
 const submitApplication = z.object({
   contentOwnershipDeclared: z.boolean().refine((val) => val === true, {
     message: "You must declare content ownership to proceed"
   })
 });
 
-// Profile Schemas
-const createProfile = z.object({
-  fullName: z.string()
-    .min(2, "Full name must be at least 2 characters")
-    .max(100, "Full name must not exceed 100 characters"),
-  
-  creatorHandle: z.string()
-    .min(3, "Creator handle must be at least 3 characters")
-    .max(30, "Creator handle must not exceed 30 characters")
-    .regex(/^[a-zA-Z0-9_]+$/, "Creator handle can only contain letters, numbers, and underscores")
-    .toLowerCase(),
-  
-  bio: z.string()
-    .min(50, "Bio must be at least 50 characters")
-    .max(500, "Bio must not exceed 500 characters"),
-  
-  category: CreatorCategoryEnum,
-  
-  customCategory: z.string()
-    .max(50, "Custom category must not exceed 50 characters")
-    .optional()
-    .nullable(),
-  
-  tokenName: z.string()
-    .min(2, "Token name must be at least 2 characters")
-    .max(50, "Token name must not exceed 50 characters"),
-  
-  tokenSymbol: z.string()
-    .min(2, "Token symbol must be at least 2 characters")
-    .max(10, "Token symbol must not exceed 10 characters")
-    .regex(/^[A-Z0-9]+$/, "Token symbol must be uppercase letters and numbers only")
-    .toUpperCase(),
-  
-  tokenPitch: z.string()
-    .min(100, "Token pitch must be at least 100 characters")
-    .max(1000, "Token pitch must not exceed 1000 characters"),
-  
-  fundingGoal: z.number()
-    .positive("Funding goal must be positive")
-    .max(1000000000, "Funding goal is too large")
-    .optional()
-    .nullable(),
-  
-  icoSupply: z.bigint()
-    .positive("ICO supply must be positive")
-    .optional()
-    .nullable()
-    .or(z.number().positive().transform(val => BigInt(val)))
-    .or(z.string().regex(/^\d+$/).transform(val => BigInt(val))),
-  
-  wallet: z.string()
-    .min(32, "Invalid wallet address")
-    .max(44, "Invalid wallet address")
-    .regex(/^[A-HJ-NP-Za-km-z1-9]+$/, "Invalid wallet address format"),
-  
-  phoneNumber: z.string()
-    .regex(/^\+?[1-9]\d{1,14}$/, "Invalid phone number format")
-    .optional()
-    .nullable(),
-  
-  profilePicture: z.string()
-    .url("Profile picture must be a valid URL")
-    .optional()
-    .nullable()
-});
+const createProfile = profileSchema;
+
+const uploadDocument = documentSchema;
+
+const addSocialLink = socialLinkSchema;
 
 const updateProfile = z.object({
-  bio: z.string()
-    .min(50, "Bio must be at least 50 characters")
-    .max(500, "Bio must not exceed 500 characters")
-    .optional(),
-  
-  phoneNumber: z.string()
+  bio: z.string().min(50).max(500).optional(),
+  phoneNumber: z
+    .string()
     .regex(/^\+?[1-9]\d{1,14}$/, "Invalid phone number format")
     .optional()
     .nullable(),
-  
-  profilePicture: z.string()
-    .url("Profile picture must be a valid URL")
-    .optional()
-    .nullable(),
-  
-  engagementMetrics: z.string()
-    .optional()
-    .nullable()
+  profilePicture: z.string().url("Invalid profile picture URL").optional().nullable(),
+  engagementMetrics: z.any().optional().nullable() // JSON field, flexible structure
 });
 
-// Document Schemas
-const uploadDocument = z.object({
-  type: DocumentTypeEnum,
-  
-  fileUrl: z.string()
-    .url("File URL must be a valid URL")
-    .max(500, "File URL is too long"),
-  
-  notes: z.string()
-    .max(500, "Notes must not exceed 500 characters")
-    .optional()
-    .nullable()
-});
-
-const updateDocumentStatus = z.object({
-  status: z.enum(["pending", "approved", "rejected"]),
-  
-  notes: z.string()
-    .max(500, "Notes must not exceed 500 characters")
-    .optional()
-    .nullable()
-});
-
-// Social Link Schemas
-const addSocialLink = z.object({
-  platform: SocialPlatformEnum,
-  
-  handle: z.string()
-    .min(1, "Handle is required")
-    .max(100, "Handle must not exceed 100 characters")
-    .regex(/^[a-zA-Z0-9_.-]+$/, "Invalid handle format"),
-  
-  url: z.string()
-    .url("Social link URL must be valid")
-    .max(500, "URL is too long"),
-  
-  followerCount: z.number()
-    .int("Follower count must be an integer")
-    .nonnegative("Follower count cannot be negative")
-    .optional()
-    .nullable()
-});
-
-const updateSocialLink = z.object({
-  handle: z.string()
-    .min(1, "Handle is required")
-    .max(100, "Handle must not exceed 100 characters")
-    .optional(),
-  
-  url: z.string()
-    .url("Social link URL must be valid")
-    .max(500, "URL is too long")
-    .optional(),
-  
-  followerCount: z.number()
-    .int("Follower count must be an integer")
-    .nonnegative("Follower count cannot be negative")
-    .optional()
-    .nullable(),
-  
-  verified: z.boolean()
-    .optional()
-});
-
-// Token Schemas
-const createToken = z.object({
-  name: z.string()
-    .min(2, "Token name must be at least 2 characters")
-    .max(50, "Token name must not exceed 50 characters"),
-  
-  symbol: z.string()
-    .min(2, "Token symbol must be at least 2 characters")
-    .max(10, "Token symbol must not exceed 10 characters")
-    .regex(/^[A-Z0-9]+$/, "Token symbol must be uppercase letters and numbers only")
-    .toUpperCase(),
-  
-  totalSupply: z.bigint()
-    .positive("Total supply must be positive")
-    .or(z.number().positive().transform(val => BigInt(val)))
-    .or(z.string().regex(/^\d+$/).transform(val => BigInt(val))),
-  
-  mintAddress: z.string()
-    .min(32, "Invalid mint address")
-    .max(44, "Invalid mint address")
-});
-
-// Admin Schemas (for reviewing applications)
-const reviewApplication = z.object({
-  state: z.enum(["under_review", "approved", "rejected"]),
-  
-  rejectionReason: z.string()
-    .min(10, "Rejection reason must be at least 10 characters")
-    .max(500, "Rejection reason must not exceed 500 characters")
-    .optional()
-    .nullable()
-});
-
-const updateCreatorStatus = z.object({
-  status: z.enum(["active", "inactive", "suspended", "pending"])
-});
-
-// Query/Filter Schemas
-const getCreatorByHandle = z.object({
-  handle: z.string()
-    .min(3, "Handle must be at least 3 characters")
-    .max(30, "Handle must not exceed 30 characters")
-});
-
-const getCreatorBySymbol = z.object({
-  symbol: z.string()
-    .min(2, "Symbol must be at least 2 characters")
-    .max(10, "Symbol must not exceed 10 characters")
-    .toUpperCase()
-});
-
-const filterCreators = z.object({
-  category: CreatorCategoryEnum.optional(),
-  status: z.enum(["active", "inactive", "suspended", "pending"]).optional(),
-  search: z.string().max(100).optional(),
-  page: z.number().int().positive().default(1).optional(),
-  limit: z.number().int().positive().max(100).default(10).optional()
-});
+// Type exports for TypeScript
+export type ProfileSchema = z.infer<typeof profileSchema>;
+export type DocumentSchema = z.infer<typeof documentSchema>;
+export type SocialLinkSchema = z.infer<typeof socialLinkSchema>;
+export type CompleteSubmissionSchema = z.infer<typeof completeSubmission>;
+export type UpdateApplicationSchema = z.infer<typeof updateApplication>;
+export type SubmitApplicationSchema = z.infer<typeof submitApplication>;
+export type CreateProfileSchema = z.infer<typeof createProfile>;
+export type UploadDocumentSchema = z.infer<typeof uploadDocument>;
+export type AddSocialLinkSchema = z.infer<typeof addSocialLink>;
+export type UpdateProfileSchema = z.infer<typeof updateProfile>;
 
 // Export all schemas
 const creatorSchema = {
-  // Application
+  // Main schemas for unified approach
+  completeSubmission,
+  updateApplication,
+  
+  // Individual component schemas
+  profile: profileSchema,
+  document: documentSchema,
+  socialLink: socialLinkSchema,
+  
+  // Legacy schemas (for backward compatibility)
   submitApplication,
-  reviewApplication,
-  
-  // Profile
   createProfile,
-  updateProfile,
-  updateCreatorStatus,
-  
-  // Documents
   uploadDocument,
-  updateDocumentStatus,
-  
-  // Social Links
   addSocialLink,
-  updateSocialLink,
-  
-  // Token
-  createToken,
-  
-  // Queries
-  getCreatorByHandle,
-  getCreatorBySymbol,
-  filterCreators
+  updateProfile
 };
 
 export default creatorSchema;
