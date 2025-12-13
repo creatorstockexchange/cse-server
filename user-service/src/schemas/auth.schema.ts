@@ -26,8 +26,8 @@ const login = z.object({
 const register = z.object({
     name: nameSchema,
     email: z.email("Invalid email format"),
-    role: z.enum(["admin", "investor", "creator"], {
-        message: "Role must be one of 'admin', 'investor', or 'creator'"
+    role: z.enum(["admin", "user", "creator"], {
+        message: "Role must be one of 'admin', 'user', or 'creator'"
     }),
     password: passwordSchema,
     password_confirmation: z.string().min(1, "Password confirmation is required")
