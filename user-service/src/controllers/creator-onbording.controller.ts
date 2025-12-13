@@ -232,7 +232,7 @@ class CreatorOnboardingController {
         return Send.error(res, null, "No application found.");
       }
 
-      if (application.state !== "pending_review") {
+      if (application.state !== "under_review") {
         return Send.error(res, null, "Cannot update application after review has started.");
       }
 
@@ -434,13 +434,95 @@ class CreatorOnboardingController {
         reviewedAt: application.reviewed_at,
         approvedAt: application.approved_at,
         rejectionReason: application.rejection_reason,
-        canUpdate: application.state === "pending_review",
+        canUpdate: application.state === "submitted",
         canWithdraw: application.state !== "approved"
       });
     } catch (error) {
       return Send.error(res, null, "Failed to check application status.");
     }
   };
+
+  static approveApplication = async (req: AuthRequest, res: Response) => {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return Send.error(res, null, "Unauthorized.");
+    }
+
+    try {
+      const user = await prisma.user.findUnique({
+        where: { id: userId }
+      })
+
+      if(!user || user.role !== "admin") {
+        return Send.error(res, null, "Only admins can approve applications.");
+      }
+
+      const { applicationId, creatorUserId } = req.body;
+
+      const application = await prisma.creator_applications.findFirst({
+        where: { id: applicationId }
+      })
+
+      if(!application) {
+        return Send.error(res, null, "Application not found.");
+      }
+
+      if(application.state !== "under_review") {
+        return Send.error(res, null, "Only applications under review can be approved.");
+      }
+
+      await prisma.$transaction(async (tx: any) => {
+        // Update application state
+        await tx.creator_applications.update({
+          where: { id: applicationId },
+          data: {
+            state: "approved",
+            approved_at: new Date()
+          }
+        });
+
+        // Update profile status
+        const profile = await tx.creator_profiles.findFirst({
+          where: { user_id: creatorUserId }
+        });
+
+        if(!profile) {
+          throw new Error("Creator profile not found.");
+        }
+
+        await tx.creator_profiles.update({
+          where: { id: profile.id },
+          data: {
+            status: "approved"
+          }
+        });
+
+        // Update user role to creator
+        await tx.user.update({
+          where: { id: creatorUserId },
+          data: {
+            role: "creator"
+          }
+        });
+
+        // Log approval
+        await tx.verification_logs.create({
+          data: {
+            user_id: creatorUserId,
+            action: "application_approved",
+            actor: `admin_${userId}`,
+            metadata: {
+              applicationId: applicationId
+            }
+          }
+        });
+      })
+
+      return Send.success(res, { message: "Application approved successfully." });
+    } catch (error) {
+      return Send.error(res, null, "Failed to approve application.");
+    }
+  }
 }
 
 export default CreatorOnboardingController;
