@@ -38,6 +38,7 @@ class IpoController {
       const ipo = await prisma.creator_ipos.create({
         data: {
           user_id: userId,
+          profile_id: creatorProfile.id,
           title: ipoData.title,
           description: ipoData.description,
           total_tokens: ipoData.totalTokens,
@@ -341,6 +342,14 @@ class IpoController {
     const { status, rejectionReason } = req.body as z.infer<typeof ipoSchema.reviewIpo>;
 
     try {
+      const user = await prisma.user.findFirst({
+        where: { id: userId }
+      });
+
+      if (!user || user.role !== "admin") {
+        return Send.error(res, null, "Only admins can review IPOs.");
+      }
+
       const ipo = await prisma.creator_ipos.findFirst({
         where: { id }
       });

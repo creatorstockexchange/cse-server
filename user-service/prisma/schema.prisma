@@ -239,7 +239,7 @@ model creator_token {
 model creator_ipos {
   id         String @id @default(uuid())
   user_id    Int    @unique
-  profile_id String @unique
+  profile_id String @unique // creator profile id
   
   // Basic info
   title       String
