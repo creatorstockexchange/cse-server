@@ -1,7 +1,7 @@
 import cluster from "cluster";
 import os from "os";
 import { startServer } from "./app.js";
-import logger from "./utils/logger.js";
+import logger from "./utils/logger.utils.js";
 
 const numberOfCores = os.cpus().length;
 

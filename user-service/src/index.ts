@@ -1,7 +1,7 @@
 import "dotenv/config";
 import { prisma } from "./db.js";
 import clusterServer from "./bin.js";
-import logger from "./utils/logger.js";
+import logger from "./utils/logger.utils.js";
 
 async function bootstrap() {
 	// establish a Prisma connection before starting the server

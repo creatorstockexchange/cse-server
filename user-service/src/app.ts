@@ -5,12 +5,12 @@ import cors from "cors";
 import client from "prom-client";
 import { prometheusMiddleware } from "./middlewares/prometheus.middleware.js";
 import { requestLogger } from "./middlewares/logging.middleware.js";
-import logger from "./utils/logger.js";
+import logger from "./utils/logger.utils.js";
 import authRoutes from "./routes/auth.routes.js";
 import depositRoutes from "./routes/deposit.routes.js";
 import ipoRoutes from "./routes/ipo.routes.js";
 
-import { port, corsOrigin } from "./config.js";
+import { PORT, corsOrigin } from "./config.js";
 
 const app = express();
 
@@ -44,6 +44,6 @@ app.use("/metrics", async (req, res) => {
 });
 
 export async function startServer() {
-  app.listen(port);
-  logger.info("Server listening", { port });
+  app.listen(PORT);
+  logger.info("Server listening", { PORT });
 }
